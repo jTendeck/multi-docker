@@ -1,0 +1,52 @@
+version: '3'
+
+services:
+  postgres:
+    image: 'postgres:latest'
+    environment:
+      - POSTGRES_PASSWORD=postgres_password # Need to add this according to recent updates to PG image
+  redis:
+    image: 'redis:latest'
+  nginx:
+    depends_on: # Resolves a possible edge case for error: failed (111: Connection refused)
+      - api
+      - client
+    restart: always # We always want the service to be up
+    build:
+      dockerfile: Dockerfile.dev
+      context: ./nginx
+    ports:
+      - '3050:80' # Nginx by default runs on port 80
+  api:
+    build:
+      dockerfile: Dockerfile.dev # Want to use Dockerfile.dev...
+      context: ./server # ... inside this folder
+    volumes:
+      - /app/node_modules # Do not try to overwrite this folder inside container
+      - ./server:/app # Any changes in local ./server folder will be reflected inside /app in the container (except /app/node_modules, as mention above)
+    environment:
+      - REDIS_HOST=redis # Reference to redis 'service'
+      - REDIS_PORT=6379 # Default redis port, according to redis docs
+      - PGUSER=postgres
+      - PGHOST=postgres # Reference to postgres 'service'
+      - PGDATABASE=postgres
+      - PGPASSWORD=postgres_password # Default pw according to pg image docs
+      - PGPORT=5432
+  client:
+    stdin_open: true
+    build:
+      dockerfile: Dockerfile.dev
+      context: ./client
+    volumes:
+      - /app/node_modules # Do not overwrite node_modules
+      - ./client:/app # Any changes in local ./client folder will be reflected inside /app in the container (except /app/node_modules, as mentioned above)
+  worker:
+    build:
+      dockerfile: Dockerfile.dev
+      context: ./worker
+    volumes:
+      - /app/node_modules # Do not overwrite node_modules
+      - ./worker:/app # Any changes in local ./worker folder will be reflected inside /app in the container (except /app/node_modules, as mentioned above)
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
