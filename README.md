@@ -714,3 +714,19 @@ EXPOSE 3000 # Want to serve React files on port 3000
 COPY ./nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=0 /app/build /usr/share/nginx/html
 ```
+
+### Travis setup
+
+A new repo for the project was created, and at the project root we add a `.travis.yml` file. With this file, before pulling on Elastic Beanstalk, we want to push our files to Docker Hub. Here is the resulting file:
+
+```yml
+
+```
+
+:::important
+Be sure you are logged into docker before pushing to docker hub. This can be achieved by running `docker login`
+:::
+
+:::important
+Since we are logging in to Docker in the travis.yml file, we need to add our login credentials as environment variables for the travis build project.
+:::

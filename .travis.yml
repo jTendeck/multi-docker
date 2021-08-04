@@ -1,0 +1,28 @@
+sudo: required
+services:
+  - docker
+
+before_install:
+  # We want to run tests. Our test suite only exists in the dev environment,
+  # so that is what we are copying over.
+  - docker build -t acrophobicowl/react-test -f ./client/Dockerfile.dev ./client
+
+script:
+  # Run tests 
+  - docker run -e CI=true acrophobicowl/react-test npm test
+
+after_success:
+  # Build production images after tests run successfully
+  - docker build -t acrophobicowl/multi-client ./client
+  - docker build -t acrophobicowl/multi-nginx ./nginx
+  - docker build -t acrophobicowl/multi-server ./server
+  - docker build -t acrophobicowl/multi-worker ./worker
+  # Log in to Docker CLI
+  # Get DOCKER_PASSWORD from env variables. Piping passes output of previous command
+  # into next command's standard in, allowing us to log in.
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_ID" --password-stdin
+  # Push images to Docker hub
+  - docker push acrophobicowl/multi-client
+  - docker push acrophobicowl/multi-nginx
+  - docker push acrophobicowl/multi-server
+  - docker push acrophobicowl/multi-worker
