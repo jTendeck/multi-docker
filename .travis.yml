@@ -26,3 +26,15 @@ after_success:
   - docker push acrophobicowl/multi-nginx
   - docker push acrophobicowl/multi-server
   - docker push acrophobicowl/multi-worker
+
+deploy:
+  provider: elasticbeanstalk
+  region: 'us-west-2'
+  app: 'multi-docker'
+  env: 'Multidocker-env'
+  bucket_name: 'elasticbeanstalk-us-west-2-944047486125'
+  bucket_path: 'docker-multi'
+  on:
+    branch: master
+  access_key_id: $AWS_ACCESS_KEY
+  secret_access_key: $AWS_SECRET_KEY

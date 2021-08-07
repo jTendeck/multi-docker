@@ -730,3 +730,118 @@ Be sure you are logged into docker before pushing to docker hub. This can be ach
 :::important
 Since we are logging in to Docker in the travis.yml file, we need to add our login credentials as environment variables for the travis build project.
 :::
+
+# Multi-Container Deployment to AWS
+
+To get our app to work on elastic beanstalk we need to create a container definition file - `Dockerrun.aws.json`. Behind the scenes, EBS uses Elastic Container Service (ECS). ECS is built using task definitions, which contain instructions on how to run a single container. Docs on task definitions [here](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters.html).
+
+Here is our task definition file (Dockerrun.aws.json):
+
+```json
+{
+  "AWSEBDockerrunVersion": 2,
+  "containerDefinitions": [
+    {
+      "name": "client",
+      "image": "acrophobicowl/multi-client",
+      "hostname": "client",
+      "essential": false
+    },
+    {
+      "name": "server",
+      "image": "acrophobicowl/multi-server",
+      "hostname": "api",
+      "essential": false
+    },
+    {
+      "name": "worker",
+      "image": "acrophobicowl/multi-worker",
+      "hostname": "worker",
+      "essential": false
+    },
+    {
+      "name": "nginx",
+      "image": "acrophobicowl/multi-nginx",
+      "essential": true,
+      "portMappings": [
+        {
+          "hostPort": 80,
+          "containerPort": 80
+        }
+      ],
+      "links": [
+        "client", "server"
+      ]
+    }
+  ]
+}
+```
+
+- name: arbitrary, but good idea to match service name
+- image: image hosted on Docker Hub. Automatically recognizes is from Docker Hub
+- hostname: the name of the service we give inside the docker-compose file. Allows us to reference definitions from other definitions.
+- essential: if true, all other task definitions will quit if that container fails
+
+:::important
+At least one container must be marked essential. We marked our nginx container as essential because that routes our traffic to the various services. If that fails, we want everything to fail.
+:::
+
+- portMappings: map ports from machine to container port.
+- links: explicitly map one container to another. References the `"name"` attribute. Links are unidirectional.
+
+### Data Services
+
+In a production environment, we will be using Amazon RDS for Potgres and Elastic Cache for Redis. EC creates, maintains Redis, scales easily (able to allocate necessary resources), built in logging + maintenance, better security, and less dependence on elastic beanstalk or other services.
+
+Same points apply to RDS, with added benefit of automated backups and rollbacks.
+
+To get RDS and EC to work with our EB app, we need to place everything in the same security group and give them rules to allow them to talk to eachother.
+
+### Creating RDS, Elasticache Instance
+
+When creating the RDS isntance, we need to make sure our database name, username, and password match up with the values we placed in the docker-compose file.
+
+Create an RDS instance using the cheapest settings available. Same deal with Elasticache.
+
+WARNING: In the video it appears stephen made his pg password postgrespassword while in the docker-compose file our password is postgres_password... we may have to change these passwords at some point, either in the RDS console or in the env variables.
+Databasename = fibvalues
+
+### Creating Security Group
+
+We now need to create a security group to house our services. We also need to allow the services inside our SG to communicate with one another. In order to do this, create an SG. Once created, add an inbound rule. Under `Source`, select the name of the security group you are currently editing (basically an inbound rule for itself).
+
+We then add each service we created to this service group (EB EC2 Instances, RDS, and Elasticache).
+
+### Adding env variables to Elastic Beanstalk, Travis CI
+
+Open the EB application, and click `Configuration` on the left, then edit the `Software` card. Scroll down to the Enviornment variables and fill in the following. These are the same env variable keys found in our `docker-compose` file (values are different though, for production)
+
+- REDIS_HOST: (`Primary Endpoint` found in Elasticache instance, _excluding_ the port. ie: `:6379`)
+- REDIS_PORT: 6379
+- PGUSER: postgres
+- PGHOST: (`Endpoint` for RDS instance)
+- PGDATABASE: fibvalues
+- PGPASSWORD: postgres_password
+- PGPORT: 5432
+
+Elastic Beanstalk will automatically map these env variables to our containers.
+
+We also need to add AWS_ACCESS_KEY and AWS_SECRET_KEY env variables to Travis CI. First, create an IAM account with prorammatic access (generate an access key and secret). Add all available elastic beanstalk permissions (or even just EB Admin) to this account. Save/make note of the access key + secret.
+
+Open the multi-docker Travis CI project in the Travis console and add AWS_ACCESS_KEY and AWS_SECRET_KEY env variables with the values provided by the newly create IAM account.
+
+Now head over to the travis.yml and place the `deploy` part of the script after `after_success`:
+
+```yml
+deploy:
+  provider: elasticbeanstalk
+  region: 'us-west-2'
+  app: 'multi-docker'
+  env: 'Multidocker-env'
+  bucket_name: 'elasticbeanstalk-us-west-2-944047486125'
+  bucket_path: 'docker-multi'
+  on:
+    branch: master
+  access_key_id: $AWS_ACCESS_KEY
+  secret_access_key: $AWS_SECRET_KEY
+```
