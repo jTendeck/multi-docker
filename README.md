@@ -845,3 +845,19 @@ deploy:
   access_key_id: $AWS_ACCESS_KEY
   secret_access_key: $AWS_SECRET_KEY
 ```
+
+Then push to GitHub master branch to trigger pipeline!
+
+### Add Memory to Container Definitions
+
+You may see a warning in the EB console regarding memory for the containers. To remedy this, you must add a `"Memory"` attribute to each container definition with the `Dockerrun.aws.json` file. Eg:
+
+```json
+{
+  "name": "client",
+  "image": "acrophobicowl/multi-client",
+  "hostname": "client",
+  "essential": false,
+  "memory": 128
+}
+```
